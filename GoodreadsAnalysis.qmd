@@ -1,0 +1,313 @@
+---
+title: "group-c-report"
+format: 
+  html: 
+    echo: false
+    self-contained: true
+
+editor: visual
+---
+
+```{r}
+#| echo: false 
+#| output: false
+library(ggplot2)
+library(infer)
+library(boot)
+library(dplyr)
+library(mosaic)
+library(tidyverse)
+
+group_c_data <- read.csv("Genre_Gender_Goodreads_data.csv")
+group_c_data <- group_c_data %>%
+  mutate("ratings_count1000s" = ratings_count/1000)
+```
+
+# Gender, Genre, and Goodreads
+
+## Raley Long, Priya Dalal-Whelan, Reilly Curp
+
+## Abstract
+
+Our primary research question is: How does bias against traditionally feminine interests impact the acclaim a novel can get? Generally, traditionally female interests are looked down upon by the patriarchy in contrast to traditionally male interests. To examine this phenomenon, we looked at how the presence of a traditionally feminine genre in a novel's classification impacts the average rating, proportion of one-star ratings, and the proportion of five-star ratings, considering number of ratings as a possible confounding variable, for 10,000 novels in English reviewed and rated on Goodreads in 2017. In our primary analysis, we found a statistically significant negative association between average rating and traditionally feminine genre, as well as a statistically significant positive association between average rating and number of reviews. We also conducted an exploratory, secondary analysis which found a positive association for proportion of 1-star reviews and traditionally feminine genre. However, the associations have little practical significance because the differences are so small. Additionally, our results are not generalizable to the public at large, so our conclusions have limited real-world relevance.
+
+## Introduction
+
+It is no secret that media enjoyed by primarily female audiences are looked down upon. This is true for music, movies, tv shows, and even novels. Femininity is a social construct and this construct influences what genre of novels the world sees as intended for women. Generally, genres such as romance and "chick-lit" are seen as feminine, and this phenomenon could correlate with the dismissal of novels in these genres as trivial or not serious pieces of literature. For this investigation we want to examine how and if the presence of a feminine coded genre influences how the book is perceived and acclaimed. This will help quantify and explain how bias against the feminine impacts readers' perceptions of the quality of the work.
+
+In our study, we examined how books with "traditionally feminine" genres and books with "not traditionally feminine" genres compared in ratings to each other. We first compared the average ratings for each genre and then examined the proportion of 1-star and 5-star ratings for each genre. We also thought that the number of reviews could be a possible confounding variable. It is possible that a more popular book with more reviews would have higher ratings. So in order to ensure that any difference in average rating was due to genre and rather than popularity, we plan to examine the relationship between number of reviews and average rating.
+
+## Data
+
+We used the Goodreads dataset to answer our question. This dataset was compiled in 2017, and it contains 10,000 observations. Each observational unit is one book on the Goodreads website that has been rated. For this investigation, we only chose to look at books in English to focus our analysis on the English speaking and Western world. It is also important to discuss where this data comes from. Goodreads is a website where people can choose to rate and/or review a novel of their choice. Consequently, this data does not represent a random sample of the general public, and it is likely that the data is skewed towards more extreme opinions since people have to feel strongly enough about a novel to go and rate it. The primary explanatory variables are genre and number of reviews. Each book is tagged with a string of multiple genres. For genre, we divided the books into two categories: "traditionally feminine" and "not traditionally feminine". The "traditionally feminine" category is all books that are tagged with the genres "romance" and or "chick lit". The "not traditionally feminine" contains all books not tagged with either "romance" or "chick lit'.
+
+Number of ratings is the number of ratings each book has received. Because the numbers were so large, we created a second variable, number of ratings in thousands, in order to see the associations between number of reviews and other variables more clearly.
+
+The response variable for the primary analysis was average rating. This was the average rating between 1 and 5 stars for a book using all the reviews it received.
+
+The secondary response variables were the proportion of 1-star reviews and the proportion of 5-star reviews. The proportion of 1 star reviews is the number of 1-star reviews for a book divided by the number of total reviews for that book. The proportion of 5 star reviews is the number of 5-star reviews for a book divided by the number of total reviews for that book.
+
+There was no missing data for any of our variables of interest, so we did not have to omit any NA values.
+
+### Table One:
+
+| Variable of Interest             | **Summary Statistics**       |
+|----------------------------------|------------------------------|
+| Average Rating (0-5)             | IQR: 0.33, median: 4.020     |
+| Proportion of One Star Ratings   | IQR: 0.015, median: 0.0156   |
+| Proportion of Five Star Ratings  | IQR: 0.159, median: 0.366    |
+| Traditionally Feminine Genre     | n=10,000, proportion: 0.344  |
+| Non-Traditionally Feminine Genre | n=10,000, proportion: 0.656  |
+| Number of Ratings                | IQR: 30,476, median: 23, 832 |
+
+### Univariate Summaries:
+
+```{r}
+ggplot(data= group_c_data, aes(x=average_rating, y= if_wom)) +
+  labs(title = "Average Rating Compared to Feminine Genre Classification", x = "Average Rating out of 5", y = "Traditionally Feminine Genre or Not") +
+  geom_boxplot()
+```
+
+```{r}
+ggplot(data = group_c_data, aes(x=prop_one_star, y=if_wom)) + labs(title = "Proportion of One Star Rating Compared to Traditionally Femine Genre Classification", x = "Proportion of One Star Ratings", y = "Traditionally Feminine Genre Classification") + geom_boxplot()
+```
+
+```{r}
+ggplot(data = group_c_data, aes(x=prop_five_star, y=if_wom)) + labs(title = "Proportion of Five Star Ratings Compared to the Presence of a Traditionally Femine Genre", x="Proportion of Five Star Ratings", y="Traditionally Femine Genre or Not") + geom_boxplot()
+```
+
+```{r}
+#| warning: false 
+#| echo: false 
+ggplot(data = group_c_data, aes(x = ratings_count1000s)) + geom_histogram() + labs(title="Distribution of Ratings Counts", subtitle="For Goodreads Books in English in 2017", x="Ratings Counts in the 1,000s", y="Counts")
+```
+
+## Results
+
+### Primary Analysis
+
+To compare average rating for traditionally feminine genres and not traditionally feminine genres, we used a probabilistic hypothesis test and constructed a confidence interval. Our null hypothesis is that there is no statistically significant difference in the average ratings for traditionally feminine genre books and the average ratings for not traditionally feminine genre books. Our alternative hypothesis is that there is a statistically significant difference between the average ratings for traditionally feminine genre books and the average ratings for not traditionally feminine genre books.
+
+$H_0$: The presence of a traditionally feminine genre has no association with the average rating of a novel on Goodreads.
+
+$H_A$: The presence of a traditionally feminine genre has an association with the average rating of a novel on Goodreads.
+
+To find a difference in average ratings, we performed a two-sided T-test.
+
+```{r}
+t.test(group_c_data$average_rating ~ group_c_data$if_wom, alternative="two.sided", conf.level=0.95)
+```
+
+We found a p-value of 0.003. With the Bonferroni correction, our threshold for rejecting the null hypothesis is 0.025. Since our p-value of 0.003 is less than 0.025, we reject the null hypothesis and conclude that there is a statistically significant difference in the mean rating for traditionally feminine genres and not traditionally feminine genres. This means the true difference in means between the average rating of traditionally feminine genres and average rating of not traditionally feminine genres is not zero.
+
+Our 95% confidence interval was (0.00543, 0.0270). This means that with 95% confidence, the true difference in means for English Goodreads books between the average rating of traditionally feminine genres and average rating of not traditionally feminine genres is between 0.005 stars and 0.027 stars.
+
+We examined the number of ratings as potential confounding variables. To do this, we constructed a regression line and tested to see if b1 was equal to zero.
+
+$H_0$: There is no linear association between number of ratings and average rating of a book. $B_1$ = 0
+
+$H_A$: There is some linear association between number of ratings and average rating of a book. $B_1$ != 0
+
+We tested this hypothesis using a permutation test. We used the infer package to conduct 5,000 permutations, holding average rating constant while swapping the number of ratings to create a null distribution. Then we compared our observed results to the null distribution and calculated a p-value. We used a 0.05 alpha level, but adjusted for multiple testing using the Bonferroni correction, so we are comparing the p-value to 0.025.
+
+```{r}
+#| ech: false
+ggplot(data=group_c_data, aes(x=ratings_count1000s, y= average_rating)) +
+  labs(title = "Number of ratings compared to average rating out of 5", x = "Thousands of of ratings", y = "Average rating (out of 5 stars") +
+  geom_point()
+
+lm = lm(average_rating~ratings_count1000s,data=group_c_data)
+lm
+
+#Coefficients:
+       #(Intercept)  ratings_count1000s  
+         #3.998e+00           6.829e-05  
+```
+
+We received a p-value of 0. We recognize that a p-value cannot truly be zero, but it is nevertheless some very small value, and well below our threshold of .025. Thus, we can conclude that there is sufficient evidence to reject the null hypothesis. In other words, the observed data falls far enough outside of the null distribution that we can say with 95 percent confidence that there is some linear association between average rating of a book on Goodreads and number of ratings of a book. With 95 percent confidence, $B_1$ is not equal to zero.
+
+In order to find out the size and direction of change in average rating for each additional thousand reviews, we conducted a bootstrap analysis on $B_1$. We re-sampled the data with replacement 5,000 times, fit a linear regression line, and calculated the $B_1$ value for each re-sample. That data was used to create the following 95 percent confidence interval:
+
+$B_1$ = (.00003598843 ,0.0001014427)
+
+In other words, with 95 % confidence, each additional 1,000 ratings leads to an expected increase of between .00003598843 and 0.0001014427 stars.
+
+In order to analyze the size of the true impact of feminine genre on average rating when controlled for the number of ratings, we constructed multiple linear regression model via bootstrapping. We used infer to bootstrap the data 5,000 times and calculate a linear regression line for each bootstrap. We used the bootstrap distribution to construct a 95 percent confidence interval for the values of $B_0$, $B_1$ and $B_2$, and received the following results:
+
+```{r}
+# Create the permutation null using infer
+null_dist_num_ratings <- group_c_data |>
+specify(average_rating ~ ratings_count1000s) |>
+hypothesize(null="independence") |>
+generate(5000, type = "permute") |>
+calculate("slope")
+p_value = null_dist_num_ratings %>% get_p_value(coef(lm)[2], direction = "both")
+
+
+# Visualizing the null distribution and p-value
+ggplot(null_dist_num_ratings, aes(x = stat)) +
+geom_density(fill = "pink") 
+geom_vline(xintercept = coef(lm)[2], linetype = 2, col="red")
+```
+
+```{r}
+set.seed(123456)
+boot_multiple <- group_c_data %>% 
+  specify(average_rating ~ ratings_count1000s + ratings_count1000s) %>%  
+  generate(reps = 5000, type = "bootstrap") %>% 
+  calculate(stat = "slope")
+
+mutiple_boot_ci = boot_multiple|> get_ci()
+mutiple_boot_ci
+```
+
+```{r}
+#| cache: true 
+
+set.seed(234567)
+
+observed_multiple_2 <- group_c_data |> 
+  specify(average_rating ~ ratings_count1000s + if_wom ) %>%
+  fit()
+
+
+boot_multiple_2 <- group_c_data %>% 
+  specify(average_rating ~ ratings_count1000s + if_wom) %>%  
+  generate(reps = 5000, type = "bootstrap") %>% 
+  fit()
+
+get_confidence_interval(
+  boot_multiple_2, 
+  point_estimate = observed_multiple_2, 
+  level = .95
+)
+```
+
+95% Confidence Intervals for Multiple Regression:
+
+$B_0$: (3.997, 4.0) $B_1$: ( 0.00003735, 0.0001017586) $B_2$: (-0.00002701827 , -0.005994083)
+
+Where...
+
+$B_0$ = baseline expected average rating $B_1$ = number of reviews (in thousands) $B_2$ = traditionally feminine or not (where 0 means not traditionally feminine and 1 means traditionally feminine)
+
+This means that, with 95 percent confidence, our expected average rating for a book with no ratings that is not tagged with a traditionally feminine genre is between 3.997 and 4.01 stars. For every additional 1000 reviews, we expect an increase in rating of between 0.00003735 - 0.0001017586 stars, holding genre constant. If a book is tagged as a traditionally feminine genre, we expect a decrease of 0.00002701827 to 0.0059940833 stars in average rating, holding the number of reviews constant.
+
+### Secondary Analysis
+
+In order to compare the proportion of one star reviews for books coded as traditionally feminine and the proportion of one star reviews for books not coded as traditionally feminine, we found the point estimate for the difference in means, conducted a permutational hypothesis test, and constructed a confidence interval at a 0.05 significance level. Our null hypothesis was that the proportion of one star reviews for books with traditionally feminine genres is equal to the proportion of one star reviews for books with non-traditionally feminine genres. Our alternative hypothesis was that there is a difference in proportions of one--star reviews for books tagged as traditionally feminine and books not tagged as traditionally feminine.
+
+$H_0$: The presence of a traditionally feminine genre has no association with the proportion of one star ratings of a novel on Goodreads. $H_A$: The presence of a traditionally feminine genre has an association with the proportion of one star ratings of a novel on Goodreads.
+
+```{r}
+p_hats_one_star <- group_c_data %>%
+  group_by(if_wom) %>%
+  summarize(mean(prop_one_star, na.rm = TRUE)) %>%
+  pull()
+d_hat_one_star <- diff(p_hats_one_star)
+d_hat_one_star
+
+```
+
+```{r}
+
+# Finding the observed t score
+obs_stat_one_star <- group_c_data %>%
+specify(prop_one_star ~ if_wom) %>%
+calculate(stat="diff in means", order=c("yes", "no"))
+
+# Approximating the null distribution and finding the associated p-value
+set.seed(11162022)
+null_dist_one_star <- group_c_data %>% specify(prop_one_star ~ if_wom) %>%
+hypothesize(null="independence") %>%
+generate(5000, type="permute") %>%
+calculate(stat="diff in means", order=c("yes", "no"))
+
+null_dist_one_star %>% get_p_value(obs_stat_one_star, direction="both")
+null_dist_one_star %>% visualize() + shade_p_value(obs_stat_one_star, direction="both")
+
+```
+
+```{r}
+set.seed(78965)
+
+boot_dist_one_star <- group_c_data %>% specify(prop_one_star ~ if_wom) %>%
+generate(5000, type="bootstrap") %>%
+calculate(stat="diff in means", order=c("yes", "no"))
+# Finding and visualizing the confidence interval
+set.seed(11162022)
+ci_one_star <- boot_dist_one_star %>% get_ci(0.95)
+boot_dist_one_star %>% visualize() + shade_ci(ci_one_star)
+ci_one_star
+```
+
+The p-value that R reports is 0. It is important to recognize that a p-value of 0 does not mean there is 0 uncertainty since this is just the number R reports if the p-value found is too small for R's capacity. Nevertheless, this provides evidence to reject the null because 0 is less than our alpha level of 0.05. We are not using a Bonferroni correction for this variable. Consequently, there is a statistically significant difference between the average proportion of one-star reviews for books on Goodreads containing traditionally feminine genres and the proportion of one-star reviews for books on Goodreads not containing traditionally feminine genres. Our 95% confidence interval was (0.0013, 0.00268). This means that we are 95% confident that the true difference between the average proportion of one-star reviews for a book on Goodreads containing a traditionally feminine genre and ones that does not is between 0.001309 and 0.002683.
+
+We also found a point-estimate for this variable. This means that for our sample, the difference in the proportion of one star reviews for books coded as traditionally feminine and books not coded as traditionally feminine is around 0.001993.
+
+In order to compare the proportion of five star reviews for books coded as traditionally feminine and the proportion of five star reviews for books not coded as traditionally feminine, we found the point estimate for our sample, conducted a hypothesis test, and found a confidence interval at a significance level of 0.05. Our null hypothesis is that the proportion of five star reviews for books with traditionally feminine genres is equal to the proportion of five star reviews for books with not traditionally feminine genres. Our alternative hypothesis was that there is a difference in proportions of five--star reviews for books tagged as traditionally feminine and books not tagged as traditionally feminine.
+
+$H_0$: The presence of a traditionally feminine genre has no association with the proportion of 5 star ratings of a novel on Goodreads. $H_A$: The presence of a traditionally feminine genre has an association with the proportion of 5 star ratings of a novel on Goodreads.
+
+```{r}
+p_hats_five_star <- group_c_data %>%
+  group_by(if_wom) %>%
+  summarize(mean(prop_five_star, na.rm = TRUE)) %>%
+  pull()
+d_hat_five_star <- diff(p_hats_five_star)
+d_hat_five_star
+```
+
+```{r}
+# Finding the observed t score
+obs_stat_five_star <- group_c_data %>%
+specify(prop_five_star ~ if_wom) %>%
+calculate(stat="diff in means", order=c("yes", "no"))
+
+# Approximating the null distribution and finding the associated p-value
+set.seed(11162022)
+null_dist_five_star <- group_c_data %>% specify(prop_five_star ~ if_wom) %>%
+hypothesize(null="independence") %>%
+generate(5000, type="permute") %>%
+calculate(stat="diff in means", order=c("yes", "no"))
+
+null_dist_five_star %>% get_p_value(obs_stat_five_star, direction="both")
+null_dist_five_star %>% visualize() + shade_p_value(obs_stat_five_star, direction="both")
+```
+
+```{r}
+boot_dist_five_star <- group_c_data %>% specify(prop_five_star ~ if_wom) %>%
+generate(5000, type="bootstrap") %>%
+calculate(stat="diff in means", order=c("yes", "no"))
+# Finding and visualizing the confidence interval
+set.seed(11162022)
+ci_five_star <- boot_dist_five_star %>% get_ci(0.95)
+boot_dist_five_star %>% visualize() + shade_ci(ci_five_star)
+ci_five_star
+```
+
+The p-value that R reports is 0.082. This is larger than our significance level of 0.05. We are not using a Bonferroni Correction on this variable since this is one of our secondary analyses. Thus, we fail to reject the null hypothesis.
+
+We are 95% confident that the difference between the average proportion of five star ratings for books on Goodreads with traditionally feminine genres and those without traditionally feminine genres is between -0.000315 and 0.009143. Since the confidence interval includes zero, this means the p-value is probably not statistically significant.
+
+We also found a point-estimate for this relationship. For our sample, the difference in the proportion of five star ratings for books coded as traditionally feminine and books not coded as traditionally feminine is around 0.004380.
+
+## Conclusions
+
+We were seeking to find out if a book that contains a traditionally feminine genre on Goodreads is associated with a difference in ratings. We also are considering the number of ratings as a possible confounder.
+
+For the association of the traditionally feminine genre with average rating, we found that when we performed a t-test, we had a small p-value of 0.003, so we rejected the null hypothesis. Whether a book was tagged with a traditionally feminine genre or not does affect its average rating. With 95% confidence, the true difference in averages for all ratings on English speaking Goodreads is between 0.00543 stars and 0.027 stars.
+
+We investigated the number of ratings, which can reflect a book's popularity, as a potential confounding variable using computational methods. We rejected the null hypothesis and concluded that there is a statistically significant linear relationship. We constructed a confidence interval of .00003598843 to 0.0001014427 which represents the expected increase in rating per thousand ratings. While this kind of change isn't noticeable at the level of a few thousand reviews, there is so much variability in the number of reviews across books that it does reflect a relevant factor when considering the expected average rating of a book. Since both variables are statistically significant, we created a multiple regression model for the data. We calculated it using computational methods:
+
+Expected average rating = (3.997, 4.0) + ( 0.00003735, 0.0001017586) number of ratings + (-0.00002701827 , -0.005994083) genre
+
+We also decided to look into the proportion of one-star and five-star ratings after we saw the association between traditionally feminine genre and average rating. We thought Goodreads reviews tend to skew towards more extreme ratings because people who go on Goodreads to write a review might have stronger views to share. We used computational methods and with the hypothesis test for proportion of 1-star reviews, we had a p-value of close to 0. Therefore, we rejected the null hypothesis. This means that there is a statistically significant association between proportion of 1 star reviews and traditionally feminine genres. With 95% confidence, the true difference for English-speaking Goodreads in the proportion of 1-star reviews for traditionally feminine books compared to non-traditionally feminine books is between 0.001309 and 0.002683. For proportion of 5-star reviews, we found a p-value of 0.082 and failed to reject the null hypothesis. Therefore, there is not a statistically significant difference in 5-star reviews for traditionally feminine books compared to not traditionally feminine books.
+
+Because our data is from Goodreads, we cannot generalize any conclusions to the general population. Goodreads books are mostly reviewed by people who choose to read them. Therefore, our results cannot tell us anything about how books are perceived by the general public, especially people who choose not to read them. We can only generalize our results to how reviewers on English-speaking Goodreads rate books. We can not make any conclusions about how society views traditionally feminine books in general.
+
+The structure of the data itself also makes it difficult to analyze smaller differences in opinions. Goodreads only allows users to rate between 1 and 5 stars, which creates a very small range with little room for nuanced opinions.
+
+Another limitation is that our classification of genres into "feminine" and "not" is subjective. We chose to use chick-lit and romance because chick-lit is overtly targeted towards women and romance has a long history of being written for and by women.We also considered adding a 'traditionally masculine' tag, but found it difficult to find genres that were easily identifiable as masculine. There is no tag that stood out as clearly masculine in the same way as romance and 'chick-lit' -- we considered sci-fi, thrillers, classics, history -- a wide range of genres. This reflects that cultural notions of femininity are much more restricted to a few subjects, while masculinity is viewed as neutral and all encompassing. Books that are more known for one genre could also be coded with another genre because genre was a string variable with multiple tags for each book. For example, a sci-fi novel could have a romantic subplot and would then be tagged as "sci-fi" and "romance" and thus in our data, it would be sorted into the traditionally feminine category. For the sake of our study, we decided the presence of a feminine genre was enough for the book to be considered traditionally feminine.
+
+For our statistical analysis, while many of our results were statistically significant, they are not practically significant because the differences are in hundredths or thousandths of a star. Because the data was so large, small differences can be statistically significant. When considering the reviews of a book, often a difference that small will not be particularly relevant to the publishers or those looking at the association between gender and public reception.

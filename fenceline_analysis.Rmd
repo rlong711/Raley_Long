@@ -1,0 +1,316 @@
+---
+title: "SDS 192 Mini-Projects 3 and 4"
+subtitle: "SDS 192"
+author: 
+- name: Kika Kovaleski
+  affiliation: Smith College
+- name: Raley Long
+  affiliation: Smith College
+- name: Nicole Reardon
+  affiliation: Smith College
+date: "`r format(Sys.Date(), '%B %e, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    theme: lumen
+    df_print: paged
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  echo = TRUE
+)
+library(tidyverse)
+library(leaflet)
+library(tidycensus)
+library(viridis)
+library(sf)
+```
+
+
+
+```{r tri-import, include=FALSE}
+tri_2020 <- read_csv("dataset/tri_2020_ca.csv", 
+                      name_repair = make.names) %>%
+   st_as_sf(coords = c("X13..LONGITUDE", "X12..LATITUDE"), 
+            crs = 4269) %>%
+   st_transform(4326)
+```
+
+
+```{r tri-summary-table, include=FALSE}
+tri_facility_on_site_totals_county <- tri_2020 %>%
+  filter(X46..UNIT.OF.MEASURE == "Pounds",
+         X7..COUNTY == "FRESNO") %>%
+  group_by(X3..FRS.ID) %>%
+  mutate(total_on_site_emissions = sum(X61..ON.SITE.RELEASE.TOTAL)) %>%
+  ungroup() %>%
+  select(X4..FACILITY.NAME, X3..FRS.ID, total_on_site_emissions) %>%
+  distinct()
+
+```
+
+## Top Ten On-Site Polluters, Fresno County, CA 2020
+
+```{r tri-analysis1, echo=FALSE}
+tri_facility_on_site_totals_county %>%
+  arrange(desc(total_on_site_emissions)) %>%
+  select(X4..FACILITY.NAME, total_on_site_emissions) %>%
+  top_n(10, total_on_site_emissions)
+```
+
+
+```{r, include=FALSE}
+tri_2020 %>% 
+  st_set_geometry(NULL) %>%
+  filter(X46..UNIT.OF.MEASURE == "Pounds",
+         X7..COUNTY == "FRESNO") %>%
+  mutate(total_air_emissions = X47..5.1...FUGITIVE.AIR + X48..5.2...STACK.AIR,
+         total_water_emissions = X49..5.3...WATER,
+         total_land_emissions = X50..5.4...UNDERGROUND + X53..5.5.1...LANDFILLS + X56..5.5.2...LAND.TREATMENT + X57..5.5.3...SURFACE.IMPNDMNT + X60..5.5.4...OTHER.DISPOSAL) %>%
+  select(X4..FACILITY.NAME, total_air_emissions, total_water_emissions, total_land_emissions, X43..CARCINOGEN) %>%
+  pivot_longer(cols = c(total_air_emissions, total_water_emissions, total_land_emissions),
+               names_to = "emission_medium",
+               values_to = "total_emissions") %>%
+  mutate(emission_medium = str_replace(emission_medium, "total_", ""),
+        emission_medium = str_replace(emission_medium, "_emissions", "")) %>%
+  group_by(emission_medium, X43..CARCINOGEN) %>%
+  mutate(total_emission_by_medium_carcinogen = sum(total_emissions)) %>%
+  select(X43..CARCINOGEN, emission_medium, total_emission_by_medium_carcinogen) %>%
+  ungroup() %>%
+  distinct() %>%
+  ggplot(aes(x = emission_medium, y = total_emission_by_medium_carcinogen)) +
+  geom_col() +
+  facet_wrap(vars(X43..CARCINOGEN)) +
+  labs(title = "Total On-Site Releases by Medium and Carcinogenicity", 
+       subtitle = "Fresno County California, 2020", 
+       x = "Emission Medium", 
+       y = "Emissions In Pounds")
+  
+               
+```
+
+
+## Top Ten Chemicals Emitted On-Site in Fresno County
+
+```{r tri-analysis3, echo=FALSE}
+tri_2020 %>% 
+  st_set_geometry(NULL) %>%
+  filter(X46..UNIT.OF.MEASURE == "Pounds",
+         X7..COUNTY == "FRESNO") %>%
+  mutate(total_air_emissions = X47..5.1...FUGITIVE.AIR + X48..5.2...STACK.AIR,
+         total_water_emissions = X49..5.3...WATER,
+         total_land_emissions = X50..5.4...UNDERGROUND + X53..5.5.1...LANDFILLS + X56..5.5.2...LAND.TREATMENT + X57..5.5.3...SURFACE.IMPNDMNT + X60..5.5.4...OTHER.DISPOSAL) %>%
+  select(X34..CHEMICAL, total_air_emissions, total_water_emissions, total_land_emissions) %>%
+  group_by(X34..CHEMICAL) %>%
+  mutate(total_air_emissions = sum(total_air_emissions),
+         total_land_emissions = sum(total_land_emissions),
+         total_water_emissions = sum(total_water_emissions),
+         total_chemical_emissions =  total_air_emissions + total_land_emissions + total_water_emissions) %>%
+  ungroup() %>%
+  distinct() %>%
+  arrange(desc(total_chemical_emissions)) %>%
+  top_n(10)
+  
+
+
+```
+
+
+```{r census-import, include=FALSE}
+census_api_key("312102c142d256353824f40f764c8080f2faaba8")
+census_block_groups <- 
+  get_decennial(geography = "block group", 
+                variables = "P2_005N", 
+                year = 2020, 
+                state = 06, 
+                county = 019, 
+                geometry = TRUE, 
+                summary_var = "P1_001N") %>%
+  st_transform(4326)
+
+census_tracts <- 
+get_decennial(geography = "tract", 
+              variables = "P2_005N", 
+              year = 2020, 
+              state = 06, 
+              county = 019, 
+              geometry = TRUE, 
+              summary_var = "P1_001N") %>%
+  st_transform(4326)
+
+```
+
+
+```{r census-wrangle, include=FALSE}
+census_block_groups <- 
+  census_block_groups %>%
+  mutate(people_of_color = summary_value - value, 
+         percent_of_people_of_color = people_of_color / summary_value * 100)
+
+census_tracts <-
+  census_tracts %>%
+  group_by(GEOID) %>%
+    mutate(people_of_color = summary_value - value, 
+           percent_of_people_of_color = people_of_color/ summary_value * 100)
+
+```
+
+
+
+```{r census-distribution, echo=FALSE}
+census_block_groups %>%
+  ggplot(aes(x = percent_of_people_of_color)) + geom_histogram(color = "white") + 
+  labs(x = "Percent of People of Color", 
+       y = "Count of Block Groups", 
+       title = "Distribution of the Percent of People of Color per Block Group",  
+       subtitle = "Fresno County California, 2020") 
+
+```
+
+
+```{r}
+library(readr)
+library(ggplot2)
+```
+
+
+```{r health-import}
+health_data_tracts <- read_csv("https://chronicdata.cdc.gov/resource/cwsq-ngmh.csv?StateAbbr=CA&CountyName=Fresno&Short_Question_Text=Current%20Asthma")
+
+health_data_tracts_census <- census_tracts %>%
+  full_join(health_data_tracts, by = c("GEOID" = "locationname"))
+
+```
+
+
+```{r health-demographic-plots, echo=FALSE}
+  ggplot(data = health_data_tracts_census, aes(x = percent_of_people_of_color, y = data_value)) +
+  geom_point() +
+  labs(title = "Percent of Population with Asthma by Racial Demographic, by Census Tract",
+       subtitle = "Fresno County California, 2020",
+       x = "Percent of Population made up of People of Color",
+       y = "Percent of Adults with Asthma") 
+
+```
+
+
+```{r redlining-import, include=FALSE}
+redlining <- st_read("dataset/cartodb-query.shp") %>%
+  st_transform(4326)
+```
+
+# Maps
+
+## Emission Facilities Layered over Racial Demographics
+
+```{r census-map, echo=FALSE}
+pal_tri <- colorBin(palette = "YlOrRd", 
+                    domain = tri_facility_on_site_totals_county$total_on_site_emissions)
+
+pal_census <- colorBin(palette = "Blues",
+                       domain = census_block_groups$percent_of_people_of_color)
+
+leaflet() %>%
+  setView(lat = 36.746841, lng = -119.772591, zoom = 10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = census_block_groups,
+              fillColor = ~pal_census(percent_of_people_of_color),
+              weight = 0.5,
+              fillOpacity = 0.5) %>%
+  addCircleMarkers(data = tri_facility_on_site_totals_county,
+                   fillColor = ~pal_tri(total_on_site_emissions),
+                   stroke = FALSE,
+                   fillOpacity = 0.7,
+                   radius = 7) %>%
+  addLegend(data = census_block_groups,
+            title = "Percent People of Color", 
+            pal = pal_census, 
+            values = ~percent_of_people_of_color) %>%
+  addLegend(data = tri_facility_on_site_totals_county, 
+            title = "Total On-Site Emissions in Pounds",
+            pal = pal_tri,
+            values = ~total_on_site_emissions)
+
+```
+
+## Emission Facilities Layered over Prevalence of Asthma in Adults
+
+```{r health-map, echo=FALSE}
+pal_health <- colorBin(palette = "Purples",
+                       domain = health_data_tracts_census$data_value, 
+                       4)
+
+leaflet() %>%
+  setView(lat = 36.746841, lng = -119.772591, zoom = 10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = health_data_tracts_census,
+              fillColor = ~pal_health(data_value),
+              stroke = TRUE,
+              weight = 0.5,
+              color = "purple",
+              fillOpacity = 0.5) %>%
+  addCircleMarkers(data = tri_facility_on_site_totals_county,
+                   fillColor = ~pal_tri(total_on_site_emissions),
+                   stroke = FALSE,
+                   fillOpacity = 0.9,
+                   radius = 6) %>%
+  addLegend(data = health_data_tracts_census,
+            title = "Percent with Current Asthma", 
+            pal = pal_health, 
+            values = ~data_value) %>%
+  addLegend(data = tri_facility_on_site_totals_county, 
+            title = "Total On-Site Emissions in Pounds",
+            pal = pal_tri,
+            values = ~total_on_site_emissions)
+  
+```
+
+## Emission Facilities layered over Redlining Map with HOLC Grades
+
+```{r redlining-map, echo=FALSE}
+
+pal_factor <- colorFactor(palette = "Set1", 
+                          domain = redlining$holc_grade)
+
+pal_redlining <- 
+  leaflet() %>%
+  setView(lat = 36.746841, lng = -119.772591, zoom = 12) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(data = redlining, 
+              fillColor = ~pal_factor(holc_grade), 
+              stroke = TRUE, 
+              weight= 0.5, 
+              fillOpacity = 0.5) %>%
+    addCircleMarkers(data = tri_facility_on_site_totals_county,
+                   fillColor = ~pal_tri(total_on_site_emissions),
+                   fillOpacity = 1,
+                   weight = 3,
+                   radius = 5) %>%
+  addLegend(data = redlining,
+            title = "HOLC Grade", 
+            pal = pal_factor, 
+            values = ~holc_grade) %>%
+  addLegend(data = tri_facility_on_site_totals_county, 
+            title = "Total On-Site Emissions in Pounds",
+            pal = pal_tri,
+            values = ~total_on_site_emissions)
+ 
+  pal_redlining
+
+```
+
+# Report
+
+Fresno County is a county in California’s Central Valley Region with a population of about 1 million people. The county is wide, and thinner in the middle than the outer edges (creating a shape somewhat like a dog bone), and the county seat is the city of Fresno, which is towards the center. The western portion of Fresno County contains major travel routes through the state of California, such as the 5 freeway and highway 99, and the eastern portion of the county includes parts of Sierra National Forest, Inyo National Forest, and Kings Canyon National Park. The most densely populated area is the city of Fresno and surrounding metropolitan area, which also includes most of the county’s reporting toxic release facilities. 
+
+Through our analysis, we found that out of all the facilities in Fresno County, JR Simplot Co produces by far the most total emissions at 66,632 pounds. Next, we found that the vast majority of the on-site emissions were for non-carcinogenic chemicals released through the air. In particular, ammonia was the chemical released in the largest amounts, with about 69,895 pounds emitted into the air and 17,690 pounds into the land. Then we examined the distribution of people of color in block groups in Fresno County and found that the largest number of block groups had between 85% and 100% people of color. When we connected health data with the census data, we found that there was a correlation between census tracts with higher percentages of people of color and higher percentages of asthma in adults. Next, we mapped the data for Fresno County. The first map showed us that nearly all of the facilities in the county were in block groups with between 70% and 100% people of color, including the facility with over 60,000 pounds of emissions and the others which had less than 20,000 pounds of emissions. The second map showed us that there is a similar correlation with the health data, as most of the facilities were in or near census tracts where over 10% of adults had current asthma. Our third map shows that while many of the facilities do not overlap with the redlining map, the ones that do are in or very close to areas with an HOLC grade of D.
+
+The key takeaway from this investigation is that there is a correlation between the position of facilities that release both toxic and non-toxic emissions and neighborhoods that predominantly housed and continue to house people of color. In addition, the facilities release the majority of their emissions through the air, and the people living near them have higher rates of asthma than the general population. There is not enough evidence in this investigation to deduce causation, but it points to a frightening trend. There are also some ethical concerns that must be considered. For instance, the census dataset assumes that racial categories are definitive and that does not reflect the experience of many people of color in this country. Consequently judgements can be made about groups of people that do not adequately reflect the situation and further racist ideologies. In addition, this dataset unintentionally obscures the systemic reasons why people of color currently live near this facility and make it easy for someone uneducated in the topic to assume that people of color simply chose to live near these types of facilities. Instead, this trend could have to do with lower cost of living nearer the facilities (which could be necessary for families of color who on average receive lower income than white households), facilities being built in historically redlined zones specifically due to lower HOLC grades, or other factors.
