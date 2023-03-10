@@ -1,0 +1,115 @@
+---
+title: "SDS 192 Mini-Project 2"
+subtitle: "SDS 192"
+author: 
+- name: Rukaiya Abdullah
+  affiliation: Smith College
+- name: Raley Long
+  affiliation: Smith College
+- name: Amelia Murphy
+  affiliation: Smith College
+date: "`r format(Sys.Date(), '%B %e, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    theme: lumen
+    df_print: paged
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, echo = TRUE)
+library(tidyverse)
+library(lubridate) 
+
+```
+
+```{r import, echo=TRUE, message=FALSE, warning=FALSE}
+# Import the data here
+open_payments_2020 <- read_csv("ma_data_open_payments.csv")
+```
+
+```{r clean, echo=TRUE, message=FALSE, warning=FALSE}
+# Write code to complete steps 1-3 below, and store your results in a new data frame. I recommend a data frame with the word "_cleaned" appended to the variable name.
+
+# Step 1: Create a new column called physician_full_name with the physician's full name (don't include middle initial or suffix; sometimes the same physician will include it in some reports and not others, and the goal is to standardize names here.)
+open_payments_2020_cleaned <- 
+  open_payments_2020 %>%
+  mutate(physician_full_name = paste(physician_first_name, physician_last_name),
+
+# Step 2: Standardize the formatting of any text variables you plan to use in the assignment by converting their text to uppercase. Note that you may need to come back to this step as you are working through your analysis. 
+
+  physician_specialty = toupper(physician_specialty),
+  nature_of_payment_or_transfer_of_value =  toupper(nature_of_payment_or_transfer_of_value), 
+  teaching_hospital_name = toupper(teaching_hospital_name), 
+  recipient_city = toupper(recipient_city), 
+  physician_full_name = toupper(physician_full_name), 
+           
+
+# Step 3: Convert the date_of_payment column and payment_publication_date columns to date format
+  date_of_payment = mdy(date_of_payment),
+  payment_publication_date = mdy(payment_publication_date))
+```
+
+# Overall Question: What is the relationship between payments in US dollars or of transfers of similar value and physicians/teaching hospitals in MA in 2020?
+
+## Analysis 1: 
+What specialty/grouping of specialties had the highest total amount of US dollars given to recipients within that certain specialty/group of specialties in MA in 2020?
+
+```{r analysis, echo=TRUE}
+total_payment_by_speciality_table<- 
+  open_payments_2020_cleaned %>%
+  filter(!is.na(physician_specialty)) %>%
+  group_by(physician_specialty) %>% 
+  summarise(total_amount_of_payment_usdollars = sum(total_amount_of_payment_usdollars, na.rm= TRUE)) %>% 
+  arrange(desc(total_amount_of_payment_usdollars))
+total_payment_by_speciality_table
+```
+
+
+## Analysis 2:
+How much is the sum of the total amount of payment in us dollars given to recipients broken down by the nature of payment or transfer of value in 2020 in MA?
+
+```{r analysis2, echo=TRUE}
+total_payment_by_nature_of_payment_table<- 
+   open_payments_2020_cleaned %>%
+  filter(!is.na(physician_specialty)) %>%
+  group_by(nature_of_payment_or_transfer_of_value) %>% 
+  summarise(total_amount_of_payment_usdollars= sum(total_amount_of_payment_usdollars, na.rm= TRUE)) %>% 
+  arrange(desc(total_amount_of_payment_usdollars)) 
+
+total_payment_by_nature_of_payment_table
+```
+
+
+## Analysis 3:
+Which teaching hospital in MA receives the highest payment and what city is that hospital in? 
+
+```{r analysis3, echo=TRUE}
+total_payment_by_hospital_name_table <-
+  open_payments_2020_cleaned %>%
+  filter(!is.na(teaching_hospital_name)) %>% 
+  group_by(teaching_hospital_name) %>%
+   summarize(total_amount_of_payment_usdollars = 
+               sum(total_amount_of_payment_usdollars)) %>%
+  arrange(desc(total_amount_of_payment_usdollars)) 
+
+total_payment_by_hospital_name_table
+```
+
+
+
+# Report
+
+Conflicts of interest between physicians and medical manufacturers/corporations are talked about often. Many feel as though they can no longer trust the medical profession and many source conflicts of interest in the reasoning. The Open Payments, a national disclosure program created under the Affordable Care Act and managed by the CMS aims to increase the transparency of the relationships between physicians and outside entities. Consequently, we wanted to see how much money corporations actually give out, to whom, and where. We knew that this would not indicate a conflict of interest, but it would give context as to what is normally spent by corporations. The dataset itself is made up of a database of payments from reporting entities (applicable manufacturers/applicable GPOs) to covered recipients (teaching hospitals that receive payment for Medicare/direct graduate medical education/ inpatient prospective payment system/ indirect medical education/psychiatric hospital IME programs). For this investigation, we only looked at Massachusetts in 2020. 
+	For our first analysis, we looked at the total amount in US dollars or other transfers of value given to recipients in each specialty. We found that allopathic & osteopathic physicians/orthopedic surgery received the most with a total of 7,548,962.42. For our second analysis, we wanted to see more about the nature of these payments. We discovered that reporting entities paid 25,550,349.49 to covered recipients in consulting fees, and 157,323.00 was given as gifts in 2020 in MA alone. Finally, our third analysis looked at which teaching hospital received the largest amount in US dollars or other transfers of value from reporting entities. The Dana-Farber Cancer Institute in Boston received the highest amount from reporting entities (81,210,411.119).
+	The key takeaway from these analyses is that the potential conflicts of interest for doctors are less simple than many of us think. Many people are very fearful of sales representatives swaying physicians with lunches and gifts, but this helps contextualize how insignificant that amount is in comparison to other natures of payments. The implication is that to see potential significant conflicts of interests for physicians, one must look at how much that money is in relation to what is the industry norm and the nature of that payment. One ethical concern is that the applicable manufacturers and applicable Grouping Purchasing Organizations submit their own data as reporting entities. While it is required by law for them to report data about these transfers, there are often NA values for some of the contextual information. This means that the reporting entities, who have a vested interest in not exposing their relationships with physicians that are conflicts of interest, have substantial control over the data given. This means that the full picture could be obscured from the companies themselves even if they report everything to the full extent of the law.  
+
+
+
+
